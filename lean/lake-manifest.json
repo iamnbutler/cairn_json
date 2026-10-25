@@ -1,0 +1,16 @@
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://cairn.registry.nexthub.sh/git/iamnbutler/cairn.git",
+   "type": "git",
+   "subDir": "lean",
+   "scope": "iamnbutler",
+   "rev": "597dea82d51f588209a73183535818e0c276c690",
+   "name": "cairn",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "597dea82d51f588209a73183535818e0c276c690",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "cairn_batteries",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

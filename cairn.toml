@@ -1,0 +1,9 @@
+[package]
+name = "cairn_batteries"
+version = "0.1.0"
+kind = "lib"
+license = "MIT"
+libs = ["CairnBatteries"]
+
+[dependencies]
+cairn = "^0.1.2"
