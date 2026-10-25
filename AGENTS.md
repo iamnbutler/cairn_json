@@ -1,8 +1,8 @@
 # AGENTS
 
-`cairn_batteries`: pure Lean libraries for [Cairn](https://github.com/iamnbutler/cairn) apps that
-touch no ABI (JSON, dates). A Cairn package (`cairn.toml`, registry name `cairn_batteries`,
-claim scope `cairn_batteries`) that requires `cairn` from the registry. No Swift product, no
+`cairn_json`: a total JSON parser and encoder in pure Lean for
+[Cairn](https://github.com/iamnbutler/cairn) apps, with proofs. A Cairn package (`cairn.toml`, registry name `cairn_json`,
+claim scope `cairn_json`) that requires `cairn` from the registry. No Swift product, no
 `@[extern]`. Read README.md for what is proved and docs/trusted.md for what is only fuzzed.
 
 ## Rules

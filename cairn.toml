@@ -1,9 +1,10 @@
 [package]
-name = "cairn_batteries"
+name = "cairn_json"
 version = "0.1.0"
 kind = "lib"
+description = "A total JSON parser and encoder for Cairn apps, with proofs"
 license = "MIT"
-libs = ["CairnBatteries"]
+libs = ["CairnJson"]
 
 [dependencies]
 cairn = "^0.1.2"
