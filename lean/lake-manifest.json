@@ -11,6 +11,6 @@
    "inputRev": "597dea82d51f588209a73183535818e0c276c690",
    "inherited": false,
    "configFile": "lakefile.lean"}],
- "name": "cairn_batteries",
+ "name": "cairn_json",
  "lakeDir": ".lake",
  "fixedToolchain": false}
