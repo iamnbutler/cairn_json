@@ -67,4 +67,13 @@ private def str? (s : String) (k : String) : Option String :=
 #guard encode (.num ⟨15, -1⟩) == "15e-1"
 #guard (decode "-0").bind Json.getNum == some ⟨0, 0⟩
 
+
+/- The linear-time string body (`strBodyGo`, which compiled code runs for `string`) agrees with
+the fuelled `strBody` on escapes, surrogate pairs, lone surrogates, control characters and an
+unterminated literal. -/
+private def bodies : List String :=
+  ["plain\" rest", "a\\u00e9\\ud83d\\ude00\\n\\t\\\"\\\\\\/\" tail", "\\ud800\"", "\\udc00\"",
+   "\\ud83dx\"", "a\x01\"", "no end", "\\q\"", "\\u12\"", "\"", ""]
+#guard bodies.all fun b => strBodyGo [] b.toList == strBody (b.length + 1) [] b.toList
+
 end CairnJson

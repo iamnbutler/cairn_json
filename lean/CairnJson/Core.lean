@@ -136,6 +136,179 @@ def strBody : Nat → List Char → List Char → Option (String × List Char)
 /-- A string literal's body, with enough fuel. -/
 def string (cs : List Char) : Option (String × List Char) := strBody (cs.length + 1) [] cs
 
+/-! ### Linear-time string literals
+
+`string` gives `strBody` the remaining input's length as fuel, which costs a pass over the rest
+of the document for every string literal: decoding was quadratic in the number of strings.
+`strBodyGo` is the same loop without fuel, by well-founded recursion on what is left, and
+`string_eq_fast` (`@[csimp]`) proves `string` equal to it, so compiled code runs the linear one
+while every definition and proof about `string` stays as it was. -/
+
+theorem hex4_length {cs rest : List Char} {n : Nat} (h : hex4 cs = some (n, rest)) :
+    rest.length < cs.length := by
+  match cs, h with
+  | a :: b :: c :: d :: r, h =>
+    simp only [hex4] at h
+    split at h
+    · cases h; simp only [List.length_cons]; omega
+    · cases h
+
+theorem ite_some_snd {α β : Type} {p : Prop} [Decidable p] {x : α × β} {y : α × β}
+    (h : (if p then some x else none) = some y) : y.2 = x.2 := by
+  by_cases hp : p
+  · rw [ite_eq_left hp] at h; cases h; rfl
+  · rw [ite_eq_right hp] at h; cases h
+
+theorem pair_len (hi : Nat) (more rest' : List Char) (d : Char)
+    (h : (match hex4 more with
+          | some (lo, rest') =>
+            if 0xDC00 ≤ lo ∧ lo < 0xE000 then
+              some (Char.ofNat (0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00)), rest')
+            else none
+          | none => none) = some (d, rest')) : rest'.length < more.length := by
+  cases hr : hex4 more with
+  | none => rw [hr] at h; cases h
+  | some p =>
+    obtain ⟨lo, r⟩ := p
+    rw [hr] at h
+    have := ite_some_snd h
+    simp only at this; subst this
+    exact hex4_length hr
+
+theorem unicode_length {hi : Nat} {rest rest' : List Char} {d : Char}
+    (h : unicode hi rest = some (d, rest')) : rest'.length ≤ rest.length := by
+  unfold unicode at h
+  by_cases h1 : 0xD800 ≤ hi ∧ hi < 0xDC00
+  · rw [ite_eq_left h1] at h
+    rcases rest with _ | ⟨c1, _ | ⟨c2, more⟩⟩
+    · cases h
+    · split at h
+      · next _ heq => simp at heq
+      · cases h
+    · by_cases e : c1 = '\\' ∧ c2 = 'u'
+      · obtain ⟨rfl, rfl⟩ := e
+        have := pair_len hi more rest' d h
+        simp only [List.length_cons]; omega
+      · split at h
+        · next more' heq =>
+          simp only [List.cons.injEq] at heq
+          exact absurd ⟨heq.1, heq.2.1⟩ e
+        · cases h
+  · rw [ite_eq_right h1] at h
+    by_cases h2 : 0xDC00 ≤ hi ∧ hi < 0xE000
+    · rw [ite_eq_left h2] at h; cases h
+    · rw [ite_eq_right h2] at h; cases h; exact Nat.le_refl _
+
+/-- After a backslash in a string literal: the character the escape stands for, and what
+follows it. -/
+def escStep : List Char → Option (Char × List Char)
+  | [] => none
+  | e :: rest =>
+    if e = 'u' then
+      match hex4 rest with
+      | some (hi, r) => unicode hi r
+      | none => none
+    else (unescape e).map (·, rest)
+
+theorem escStep_length {cs rest : List Char} {d : Char} (h : escStep cs = some (d, rest)) :
+    rest.length < cs.length := by
+  match cs, h with
+  | e :: r, h =>
+    simp only [escStep] at h
+    split at h
+    · split at h
+      · next hi r' h4 =>
+        have := unicode_length h; have := hex4_length h4; simp only [List.length_cons]; omega
+      · cases h
+    · cases hu : unescape e with
+      | none => simp [hu] at h
+      | some x => simp only [hu, Option.map_some, Option.some.injEq, Prod.mk.injEq] at h
+                  obtain ⟨-, rfl⟩ := h; simp
+
+/-- `strBody` without fuel: the same steps, recursing on a shorter rest each time. -/
+def strBodyGo (acc : List Char) : List Char → Option (String × List Char)
+  | [] => none
+  | c :: rest =>
+    if c = '"' then some (String.ofList acc.reverse, rest)
+    else if c = '\\' then
+      match h : escStep rest with
+      | some (d, r) =>
+        have : r.length < rest.length := escStep_length h
+        strBodyGo (d :: acc) r
+      | none => none
+    else if c.toNat < 0x20 then none
+    else strBodyGo (c :: acc) rest
+termination_by cs => cs.length
+decreasing_by all_goals simp_wf <;> omega
+
+/-- With fuel beyond the input's length, `strBody` is `strBodyGo`. -/
+theorem strBody_eq_go : ∀ (n : Nat) (acc cs : List Char), cs.length < n →
+    strBody n acc cs = strBodyGo acc cs
+  | 0, _, _, h => absurd h (Nat.not_lt_zero _)
+  | _ + 1, _, [], _ => by simp [strBody, strBodyGo]
+  | n + 1, acc, c :: rest, h => by
+    simp only [List.length_cons] at h
+    rw [strBodyGo.eq_def]
+    simp only [strBody]
+    split
+    · rfl
+    · split
+      · match rest, h with
+        | [], _ => simp [escStep]
+        | e :: rest, h =>
+          simp only [List.length_cons] at h
+          have go : ∀ d r, escStep (e :: rest) = some (d, r) →
+              strBody n (d :: acc) r = strBodyGo (d :: acc) r := fun d r hx =>
+            strBody_eq_go n (d :: acc) r (by have := escStep_length hx; simp only [List.length_cons] at this; omega)
+          by_cases he : e = 'u'
+          · subst he
+            cases h4 : hex4 rest with
+            | none =>
+              have hx : escStep ('u' :: rest) = none := by simp [escStep, h4]
+              simp only [↓reduceIte, h4]
+              split
+              · next heq => rw [hx] at heq; cases heq
+              · rfl
+            | some p =>
+              obtain ⟨hi, r⟩ := p
+              cases hu : unicode hi r with
+              | none =>
+                have hx : escStep ('u' :: rest) = none := by simp [escStep, h4, hu]
+                simp only [↓reduceIte, h4, hu]
+                split
+                · next heq => rw [hx] at heq; cases heq
+                · rfl
+              | some q =>
+                obtain ⟨d, r'⟩ := q
+                have hx : escStep ('u' :: rest) = some (d, r') := by simp [escStep, h4, hu]
+                simp only [↓reduceIte, h4, hu]
+                split
+                · next d' r'' heq => rw [hx] at heq; cases heq; exact go d r' hx
+                · next heq => rw [hx] at heq; cases heq
+          · cases hu : unescape e with
+            | none =>
+              have hx : escStep (e :: rest) = none := by simp [escStep, he, hu]
+              simp only [he, ↓reduceIte, hu]
+              split
+              · next heq => rw [hx] at heq; cases heq
+              · rfl
+            | some d =>
+              have hx : escStep (e :: rest) = some (d, rest) := by simp [escStep, he, hu]
+              simp only [he, ↓reduceIte, hu]
+              split
+              · next d' r'' heq => rw [hx] at heq; cases heq; exact go d rest hx
+              · next heq => rw [hx] at heq; cases heq
+      · split
+        · rfl
+        · exact strBody_eq_go n (c :: acc) rest (by omega)
+
+/-- `string`, in linear time. -/
+def stringFast (cs : List Char) : Option (String × List Char) := strBodyGo [] cs
+
+@[csimp] theorem string_eq_fast : @string = @stringFast := by
+  funext cs
+  exact strBody_eq_go _ [] cs (Nat.lt_succ_self _)
+
 /-- `.` and at least one digit, or nothing. -/
 def fraction : List Char → Option (List Char × List Char)
   | '.' :: r =>
