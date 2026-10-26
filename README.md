@@ -72,6 +72,13 @@ without `sorry`. The round-trip theorems show the fuel is enough for every encod
 fuel bound is fuzzed rather than proved: every fuzz case is parsed again with four times the
 fuel and must give the same answer.
 
+**Speed.** `string` is specified with the rest of the input's length as fuel, which would cost a
+pass over the rest of the document for every string literal. Compiled code runs `stringFast`
+instead (`strBodyGo`, the same loop by well-founded recursion on what is left), through
+`@[csimp] string_eq_fast : @string = @stringFast`, proved from `strBody_eq_go`; so decoding is
+linear and every theorem above is about the same definitions. From 0.1.1: a 17 KB document of
+540 strings decodes in 53 µs, down from 539 µs.
+
 `Number` is exact, so there is no canonical form to choose: `decode` keeps a number's digits
 as written and `encode` writes `mantissa` then `e` and the exponent (`15e-1`), which reads back
 as the same `Number`. Equality is the structure's, so `1.5` (`⟨15, -1⟩`) and `1.50`
